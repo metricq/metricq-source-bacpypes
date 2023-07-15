@@ -111,7 +111,7 @@ class Metric:
         self.identifier = config.identifier
         self.unit = config.unit
         self._property_parameter = [
-            ObjectIdentifier.cast(self.identifier),
+            ObjectIdentifier(self.identifier),
             PropertyIdentifier.presentValue,
         ]
 
