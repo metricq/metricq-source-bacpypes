@@ -2,9 +2,8 @@ from typing import Optional
 
 from pydantic import BaseModel
 from pydantic.class_validators import validator
-from pydantic.config import Extra
 from pydantic.fields import Field
-from pydantic.types import NonNegativeInt, PositiveFloat, PositiveInt
+from pydantic.types import PositiveFloat, PositiveInt
 
 _model_config = {"extra": "forbid", "frozen": True}
 """
@@ -42,7 +41,7 @@ class Group(BaseModel, **_model_config):
     metrics: dict[str, Metric]
     """Dictionary of metrics, keys are the metric names prefixed by the host name"""
 
-    @validator("metrics")
+    @validator("metrics")  # type: ignore
     def metrics_not_empty(cls, v: dict[str, Metric]) -> dict[str, Metric]:
         if len(v) == 0:
             raise ValueError("Group must have at least one metric")

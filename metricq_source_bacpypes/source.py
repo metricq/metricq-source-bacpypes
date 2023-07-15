@@ -27,17 +27,16 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import asyncio
-from itertools import chain
 from contextlib import suppress
+from itertools import chain
 from typing import Any, Iterable, Optional, Sequence, cast
 
 from bacpypes3.app import Application  # type: ignore
+from bacpypes3.basetypes import PropertyIdentifier  # type: ignore
 from bacpypes3.ipv4.app import NormalApplication  # type: ignore
 from bacpypes3.local.device import DeviceObject  # type: ignore
-from bacpypes3.primitivedata import ObjectIdentifier  # type: ignore
-from bacpypes3.basetypes import PropertyIdentifier  # type: ignore
 from bacpypes3.pdu import Address, IPv4Address  # type: ignore
-
+from bacpypes3.primitivedata import ObjectIdentifier  # type: ignore
 from metricq import JsonDict, MetadataDict, Source, Timedelta, Timestamp, rpc_handler
 from metricq.logging import get_logger
 
@@ -109,10 +108,10 @@ class Metric:
 
         self.identifier = config.identifier
         self.unit = config.unit
-        self._property_parameter = [
+        self._property_parameter = (
             ObjectIdentifier(self.identifier),
             PropertyIdentifier("presentValue"),
-        ]
+        )
 
     @property
     def name(self) -> str:
@@ -132,7 +131,7 @@ class Metric:
         return metadata
 
     @property
-    def property_parameter(self):
+    def property_parameter(self) -> tuple[ObjectIdentifier, PropertyIdentifier]:
         return self._property_parameter
 
     async def update(
