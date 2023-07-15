@@ -1,13 +1,14 @@
 name: Build and push docker image
 
 on:
-  push:
-    branches:
-      - "**"
-    tags:
-      - "v*.*.*"
-  pull_request:
-  workflow_dispatch:
+  workflow_run:
+    workflows: ["Python tests"]
+      branches:
+        - "**"
+      tags:
+        - "v*.*.*"
+    types: 
+      - completed
 
 jobs:
   docker:
