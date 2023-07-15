@@ -229,7 +229,7 @@ class MetricGroup:
     ) -> None:
         timestamp = Timestamp.now()
         response = await app.read_property_multiple(
-            self.device.address,
+            self.device.bacnet_address,
             list(chain(*[metric.property_parameter for metric in self._metrics])),
         )
         duration = Timestamp.now() - timestamp
@@ -250,7 +250,8 @@ class Device:
         config: config_model.Device,
     ):
         self.source = source
-        self._address = Address(config.address)
+        self._address = config.address
+        self.bacnet_address = Address(self._address)
         self.metric_prefix = config.prefix
         self.description = config.description
 
@@ -337,8 +338,8 @@ class BacpypesSource(Source):
         await self.declare_metrics(
             {
                 metric: metadata
-                for host in self.devices
-                for metric, metadata in host.metadata.items()
+                for device in self.devices
+                for metric, metadata in device.metadata.items()
             }
         )
 
