@@ -36,6 +36,7 @@ from bacpypes3.ipv4.app import NormalApplication  # type: ignore
 from bacpypes3.local.device import DeviceObject  # type: ignore
 from bacpypes3.primitivedata import ObjectIdentifier  # type: ignore
 from bacpypes3.basetypes import PropertyIdentifier  # type: ignore
+from bacpypes3.pdu import IPv4Address  # type: ignore
 
 from metricq import JsonDict, MetadataDict, Source, Timedelta, Timestamp, rpc_handler
 from metricq.logging import get_logger
@@ -325,7 +326,7 @@ class BacpypesSource(Source):
             vendorIdentifier=999,
         )
 
-        self.bacnet = NormalApplication(this_device, config.bacnetAddress)
+        self.bacnet = NormalApplication(this_device, IPv4Address(config.bacnetAddress))
 
         self.devices = list(Device.create_from_device_configs(self, config.devices))
 
