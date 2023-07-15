@@ -3,11 +3,7 @@ name: Build and push docker image
 on:
   workflow_run:
     workflows: ["Python tests"]
-      branches:
-        - "**"
-      tags:
-        - "v*.*.*"
-    types: 
+    types:
       - completed
 
 jobs:
