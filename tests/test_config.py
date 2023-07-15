@@ -27,7 +27,7 @@ def test_simple() -> None:
                     ],
                 },
             ],
-        }  # type: ignore # mypy does not like this, but this is about parsing
+        }
     )
     assert source.devices[0].groups[0].metrics["foo"].identifier == "analogValue:190"
 
@@ -54,7 +54,7 @@ def test_minimal() -> None:
                     ],
                 },
             ],
-        }  # type: ignore # mypy does not like this, but this is about parsing
+        }
     )
 
 
@@ -112,7 +112,7 @@ def test_long() -> None:
                     ],
                 },
             ],
-        }  # type: ignore # mypy does not like this, but this is about parsing
+        }
     )
 
 
@@ -137,7 +137,7 @@ def test_extra() -> None:
                         ],
                     },
                 ],
-            }  # type: ignore # mypy does not like this, but this is about parsing
+            }
         )
 
 
@@ -154,7 +154,7 @@ def test_missing_address() -> None:
                         "groups": [{"metrics": {"foo": {}}}],
                     },
                 ],
-            }  # type: ignore # mypy does not like this, but this is about parsing
+            }
         )
 
 
@@ -171,7 +171,7 @@ def test_wrong_address_type() -> None:
                     "groups": [{"metrics": {"foo": {"identifier": "analogValue:123"}}}],
                 },
             ],
-        }  # type: ignore # mypy does not like this, but this is about parsing
+        }
     )
     assert config.devices[0].groups[0].metrics["foo"].identifier == "analogValue:123"
     assert isinstance(config.devices[0].groups[0].metrics["foo"].identifier, str)
@@ -189,7 +189,7 @@ def test_invalid_address() -> None:
                         "groups": [{"metrics": {"foo": {"address": ""}}}],
                     },
                 ],
-            }  # type: ignore # mypy does not like this, but this is about parsing
+            }
         )
 
 
@@ -206,7 +206,7 @@ def test_empty_metrics() -> None:
                         "groups": [{"metrics": {}}],
                     },
                 ],
-            }  # type: ignore # mypy does not like this, but this is about parsing
+            }
         )
 
 
@@ -223,7 +223,7 @@ def test_empty_groups() -> None:
                         "groups": [],
                     },
                 ],
-            }  # type: ignore # mypy does not like this, but this is about parsing
+            }
         )
 
 
@@ -233,5 +233,5 @@ def test_empty_hosts() -> None:
             **{
                 "interval": "100ms",
                 "hosts": [],
-            }  # type: ignore # mypy does not like this, but this is about parsing
+            }
         )
