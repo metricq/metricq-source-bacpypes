@@ -37,7 +37,7 @@ from bacpypes3.ipv4.app import NormalApplication  # type: ignore
 from bacpypes3.local.device import DeviceObject  # type: ignore
 from bacpypes3.primitivedata import ObjectIdentifier  # type: ignore
 from bacpypes3.basetypes import PropertyIdentifier  # type: ignore
-from bacpypes3.pdu import IPv4Address  # type: ignore
+from bacpypes3.pdu import Address, IPv4Address  # type: ignore
 
 from metricq import JsonDict, MetadataDict, Source, Timedelta, Timestamp, rpc_handler
 from metricq.logging import get_logger
@@ -250,7 +250,7 @@ class Device:
         config: config_model.Device,
     ):
         self.source = source
-        self._address = config.address
+        self._address = Address(config.address)
         self.metric_prefix = config.prefix
         self.description = config.description
 
