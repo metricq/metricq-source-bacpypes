@@ -28,7 +28,6 @@
 
 import asyncio
 from itertools import chain
-import struct
 from contextlib import suppress
 from typing import Any, Iterable, Optional, Sequence, cast
 
@@ -143,7 +142,7 @@ class Metric:
     ) -> None:
         for data in response:
             if data[0] == self.property_parameter[0]:
-                await self._source_metric.send(timestamp, cast(float, data[2]))
+                await self._source_metric.send(timestamp, cast(float, data[3]))
 
 
 class MetricGroup:
