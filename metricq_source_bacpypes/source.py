@@ -27,6 +27,7 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import asyncio
+from itertools import chain
 import struct
 from contextlib import suppress
 from typing import Any, Iterable, Optional, Sequence, cast
@@ -228,7 +229,8 @@ class MetricGroup:
     ) -> None:
         timestamp = Timestamp.now()
         response = await app.read_property_multiple(
-            self.device.address, [metric.property_parameter for metric in self._metrics]
+            self.device.address,
+            list(chain(metric.property_parameter for metric in self._metrics)),
         )
         duration = Timestamp.now() - timestamp
         logger.debug(f"Request finished successfully in {duration}")
