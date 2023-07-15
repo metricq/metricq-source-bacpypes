@@ -230,7 +230,7 @@ class MetricGroup:
         timestamp = Timestamp.now()
         response = await app.read_property_multiple(
             self.device.address,
-            list(chain(metric.property_parameter for metric in self._metrics)),
+            list(chain(*[metric.property_parameter for metric in self._metrics])),
         )
         duration = Timestamp.now() - timestamp
         logger.debug(f"Request finished successfully in {duration}")
@@ -317,15 +317,17 @@ class BacpypesSource(Source):
 
         if self.devices is not None:
             await self._stop_device_tasks()
-
-        if self.bacnet is not None:
-            self.bacnet.close()
-            self.bacnet = None
+            if self.bacnet is not None:
+                # If the connect somewhat failed, close will raise an attribute error
+                with suppress(AttributeError):
+                    self.bacnet.close()
+                self.bacnet = None
 
         this_device = DeviceObject(
-            objectIdentifier=("device", 7),
             objectName="MetricQBacpypesSource",
-            vendorIdentifier=999,
+            objectIdentifier=7,
+            vendorIdentifier=15,
+            maxApduLengthAccepted=1476,  # was like that in ye olden scriptures
         )
 
         self.bacnet = NormalApplication(this_device, IPv4Address(config.bacnetAddress))
