@@ -112,7 +112,7 @@ class Metric:
         self.unit = config.unit
         self._property_parameter = [
             ObjectIdentifier(self.identifier),
-            PropertyIdentifier.presentValue,
+            PropertyIdentifier("presentValue"),
         ]
 
     @property
