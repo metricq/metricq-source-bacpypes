@@ -1,25 +1,24 @@
 import pytest
 from pydantic import ValidationError
 
-from metricq_source_modbus import config_model
+from metricq_source_bacpypes import config_model
 
 
 def test_simple() -> None:
     source = config_model.Source(
         **{
             "interval": "100ms",
-            "hosts": [
+            "bacnetAddress": "123.45.67.89",
+            "devices": [
                 {
-                    "hosts": "test[1-3]",
-                    "port": 502,
-                    "names": "example.test[1-3]",
-                    "slave_id": 1,
+                    "address": "test[1-3]",
+                    "prefix": "example.test[1-3]",
                     "description": "Test",
                     "groups": [
                         {
                             "metrics": {
                                 "foo": {
-                                    "address": 42,
+                                    "identifier": "analogValue:190",
                                     "description": "Some foo example",
                                     "unit": "W",
                                 }
@@ -30,7 +29,7 @@ def test_simple() -> None:
             ],
         }  # type: ignore # mypy does not like this, but this is about parsing
     )
-    assert source.hosts[0].groups[0].metrics["foo"].address == 42
+    assert source.devices[0].groups[0].metrics["foo"].identifier == "analogValue:190"
 
 
 def test_minimal() -> None:
@@ -39,16 +38,16 @@ def test_minimal() -> None:
         **{
             "_ref": "abcd",
             "_rev": "efgh",
-            "hosts": [
+            "bacnetAddress": "123.45.67.89",
+            "devices": [
                 {
-                    "hosts": "test[1-3]",
-                    "names": "example.test[1-3]",
-                    "slave_id": 1,
+                    "address": "test",
+                    "prefix": "example.test",
                     "groups": [
                         {
                             "metrics": {
                                 "foo": {
-                                    "address": 0,
+                                    "identifier": "analogValue:123",
                                 }
                             }
                         }
@@ -63,18 +62,17 @@ def test_long() -> None:
     config_model.Source(
         **{
             "interval": "100ms",
-            "hosts": [
+            "bacnetAddress": "123.45.67.89",
+            "devices": [
                 {
-                    "hosts": "test[1-3]",
-                    "port": 502,
-                    "names": "example.test[1-3]",
-                    "slave_id": 1,
+                    "address": "test",
+                    "prefix": "example.test",
                     "description": "Test",
                     "groups": [
                         {
                             "metrics": {
                                 "foo.power": {
-                                    "address": 0,
+                                    "identifier": "analogValue:123",
                                     "description": "Some foo example",
                                     "unit": "W",
                                 }
@@ -83,7 +81,7 @@ def test_long() -> None:
                         {
                             "metrics": {
                                 "bar.power": {
-                                    "address": 19000,
+                                    "identifier": "analogValue:143",
                                     "description": "Some bar example",
                                     "unit": "W",
                                 }
@@ -92,22 +90,20 @@ def test_long() -> None:
                     ],
                 },
                 {
-                    "hosts": "toast[1-5]",
-                    "port": 505,
-                    "names": "example.toast[1-5]",
-                    "slave_id": 17,
+                    "address": "toast",
+                    "prefix": "example.toast",
                     "description": "Nice and crispy",
                     "groups": [
                         {
                             "interval": "200ms",
                             "metrics": {
                                 "foo.power": {
-                                    "address": 1900,
+                                    "identifier": "analogValue:123",
                                     "description": "Some foo example",
                                     "unit": "W",
                                 },
                                 "bar.power": {
-                                    "address": 1902,
+                                    "identifier": "analogValue:124",
                                     "description": "Some bar example",
                                     "unit": "W",
                                 },
@@ -167,18 +163,18 @@ def test_wrong_address_type() -> None:
     config = config_model.Source(
         **{
             "interval": "100ms",
-            "hosts": [
+            "bacnetAddress": "123.45.67.89",
+            "devices": [
                 {
-                    "hosts": "test[1-3]",
-                    "names": "example.test[1-3]",
-                    "slave_id": 1,
-                    "groups": [{"metrics": {"foo": {"address": "0"}}}],
+                    "address": "test",
+                    "prefix": "example.test",
+                    "groups": [{"metrics": {"foo": {"identifier": "analogValue:123"}}}],
                 },
             ],
         }  # type: ignore # mypy does not like this, but this is about parsing
     )
-    assert config.hosts[0].groups[0].metrics["foo"].address == 0
-    assert isinstance(config.hosts[0].groups[0].metrics["foo"].address, int)
+    assert config.devices[0].groups[0].metrics["foo"].identifier == "analogValue:123"
+    assert isinstance(config.devices[0].groups[0].metrics["foo"].identifier, str)
 
 
 def test_invalid_address() -> None:
@@ -190,7 +186,6 @@ def test_invalid_address() -> None:
                     {
                         "hosts": "test[1-3]",
                         "names": "example.test[1-3]",
-                        "slave_id": 1,
                         "groups": [{"metrics": {"foo": {"address": ""}}}],
                     },
                 ],

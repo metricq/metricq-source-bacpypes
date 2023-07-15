@@ -31,8 +31,12 @@ import struct
 from contextlib import suppress
 from typing import Any, Iterable, Optional, Sequence, cast
 
-from async_modbus import AsyncClient, AsyncTCPClient  # type: ignore
-from hostlist import expand_hostlist  # type: ignore
+from bacpypes3.app import Application  # type: ignore
+from bacpypes3.ipv4.app import NormalApplication  # type: ignore
+from bacpypes3.local.device import DeviceObject  # type: ignore
+from bacpypes3.primitivedata import ObjectIdentifier  # type: ignore
+from bacpypes3.basetypes import PropertyIdentifier  # type: ignore
+
 from metricq import JsonDict, MetadataDict, Source, Timedelta, Timestamp, rpc_handler
 from metricq.logging import get_logger
 
@@ -41,12 +45,6 @@ from .version import __version__  # noqa: F401 # magic import for automatic vers
 
 logger = get_logger()
 
-
-REGISTERS_PER_VALUE = 2
-"""Number of 16 bit modbus registers per value (float per definition for now)"""
-
-BYTES_PER_REGISTER = 2
-"""Number of bytes per 16 bit modbus register"""
 
 CONNECTION_FAILURE_RETRY_INTERVAL = 10
 """Interval in seconds to retry connecting to a host after a connection failure"""
@@ -93,28 +91,27 @@ class Metric:
         config: config_model.Metric,
     ):
         self.group = group
-        host = group.host
+        device = group.device
 
         self.description = config.description
-        if host.description:
-            self.description = f"{host.description} {self.description}"
+        if device.description:
+            self.description = f"{device.description} {self.description}"
 
         chunk_size = config.chunk_size
         if chunk_size is None and group.interval < Timedelta.from_s(1):
             # Default chunking to one update per second
             chunk_size = Timedelta.from_s(1) // group.interval
 
-        self._source_metric = host.source[name]
+        self._source_metric = device.source[name]
         if chunk_size is not None:
             self._source_metric.chunk_size = chunk_size
 
-        self.address = config.address
+        self.identifier = config.identifier
         self.unit = config.unit
-
-    @property
-    def num_registers(self) -> int:
-        """For now we assume float values, so two registers per value"""
-        return REGISTERS_PER_VALUE
+        self._property_parameter = [
+            ObjectIdentifier.cast(self.identifier),
+            PropertyIdentifier.presentValue,
+        ]
 
     @property
     def name(self) -> str:
@@ -126,56 +123,50 @@ class Metric:
             "description": self.description,
             "rate": 1 / self.group.interval.s,
             "interval": self.group.interval.precise_string,
-            "host": self.group.host.host,
-            "port": self.group.host.port,
-            "registerAddress": self.address,
-            "registerType": "float",  # the only option for now
+            "address": self.group.device.address,
+            "identifier": self.identifier,
         }
         if self.unit:
             metadata["unit"] = self.unit
         return metadata
 
     @property
-    def offset(self) -> int:
-        offset = self.address - self.group.base_address
-        assert offset >= 0, "offset non-negative"
-        return offset
+    def property_parameter(self):
+        return self._property_parameter
 
-    async def update(self, timestamp: Timestamp, buffer: bytes) -> None:
-        (value,) = struct.unpack_from(
-            ">f", buffer=buffer, offset=(self.offset * BYTES_PER_REGISTER)
-        )
-        await self._source_metric.send(timestamp, value)
+    async def update(
+        self,
+        timestamp: Timestamp,
+        response: list[tuple[ObjectIdentifier, PropertyIdentifier, int | None, Any]],
+    ) -> None:
+        for data in response:
+            if data[0] == self.property_parameter[0]:
+                await self._source_metric.send(timestamp, cast(float, data[2]))
 
 
 class MetricGroup:
     """
     Represents a set of metrics
-    - same host (implicitly)
+    - same device (implicitly)
     - same interval (implicitly)
-    - common address space (based on addresses within the metrics)
     """
-
-    _previous_buffer: Optional[bytes] = None
 
     def _create_metrics(self, metrics: dict[str, config_model.Metric]) -> list[Metric]:
         return [
             Metric(
-                combine_name(self.host.metric_prefix, metric_name),
+                combine_name(self.device.metric_prefix, metric_name),
                 group=self,
                 config=metric_config,
             )
             for metric_name, metric_config in metrics.items()
         ]
 
-    def __init__(self, host: "Host", config: config_model.Group) -> None:
-        self.host = host
-
-        self._double_sample = config.double_sample
+    def __init__(self, device: "Device", config: config_model.Group) -> None:
+        self.device = device
 
         interval = extract_interval(config)
         if interval is None:
-            interval = host.source.default_interval
+            interval = device.source.default_interval
             if interval is None:
                 raise ConfigError("missing interval")
         self.interval: Timedelta = interval
@@ -184,26 +175,18 @@ class MetricGroup:
         # and use `self._metrics` later
         self._metrics = self._create_metrics(config.metrics)
 
-        self.base_address: int = min((metric.address for metric in self._metrics))
-        end_address = max(
-            (metric.address + metric.num_registers for metric in self._metrics)
-        )
-        self._num_registers = end_address - self.base_address
-
     @property
     def metadata(self) -> dict[str, MetadataDict]:
         return {metric.name: metric.metadata for metric in self._metrics}
 
     @property
     def _sampling_interval(self) -> Timedelta:
-        if self._double_sample:
-            return self.interval // 2
         return self.interval
 
     async def task(
         self,
         stop_future: asyncio.Future[None],
-        client: AsyncClient,
+        app: Application,
     ) -> None:
         # Similar code as to metricq.IntervalSource.task, but for individual MetricGroups
         deadline = Timestamp.now()
@@ -211,7 +194,7 @@ class MetricGroup:
             deadline % self._sampling_interval
         )  # Align deadlines to the interval
         while True:
-            await self._update(client)
+            await self._update(app)
 
             now = Timestamp.now()
             deadline += self._sampling_interval
@@ -240,87 +223,56 @@ class MetricGroup:
 
     async def _update(
         self,
-        client: AsyncClient,
+        app: Application,
     ) -> None:
         timestamp = Timestamp.now()
-        raw_values = await client.read_input_registers(
-            self.host.slave_id, self.base_address, self._num_registers
+        response = await app.read_property_multiple(
+            self.device.address, [metric.property_parameter for metric in self._metrics]
         )
-        assert len(raw_values) == self._num_registers
-        buffer = struct.pack(f">{len(raw_values)}H", *raw_values)
-
         duration = Timestamp.now() - timestamp
         logger.debug(f"Request finished successfully in {duration}")
 
         # TODO insert small sleep and see if that helps align stuff
 
-        if self._double_sample:
-            if self._previous_buffer is not None and self._previous_buffer == buffer:
-                logger.debug("Skipping double sample")
-                self._previous_buffer = None  # Skip only one buffer
-                return
-            self._previous_buffer = buffer
-
         await asyncio.gather(
-            *(metric.update(timestamp, buffer) for metric in self._metrics)
+            *(metric.update(timestamp, response) for metric in self._metrics)
         )
 
 
-class Host:
+class Device:
     def __init__(
         self,
-        source: "ModbusSource",
+        source: "BacpypesSource",
         *,
-        host: str,
-        name: str,
-        config: config_model.Host,
+        config: config_model.Device,
     ):
         self.source = source
-        self._host = host
-        self._port = config.port
-        self.metric_prefix = name
-        self.slave_id = config.slave_id
+        self._address = config.address
+        self.metric_prefix = config.prefix
         self.description = config.description
 
         self._groups = [
             MetricGroup(self, group_config) for group_config in config.groups
         ]
 
-    @staticmethod
-    def _parse_hosts(hosts: str | list[str]) -> list[str]:
-        if isinstance(hosts, str):
-            return cast(list[str], expand_hostlist(hosts))
-        assert isinstance(hosts, list)
-        assert all(isinstance(host, str) for host in hosts)
-        return hosts
-
     @classmethod
-    def _create_from_host_config(
+    def _create_from_device_config(
         cls,
-        source: "ModbusSource",
-        host_config: config_model.Host,
-    ) -> Iterable["Host"]:
-        hosts = cls._parse_hosts(host_config.hosts)
-        names = cls._parse_hosts(host_config.names)
-        if len(hosts) != len(names):
-            raise ConfigError("Number of names and hosts differ")
-        for host, name in zip(hosts, names):
-            yield Host(source=source, host=host, name=name, config=host_config)
+        source: "BacpypesSource",
+        device_config: config_model.Device,
+    ) -> Iterable["Device"]:
+        yield Device(source=source, config=device_config)
 
     @classmethod
-    def create_from_host_configs(
-        cls, source: "ModbusSource", host_configs: Sequence[config_model.Host]
-    ) -> Iterable["Host"]:
-        for host_config in host_configs:
-            yield from cls._create_from_host_config(source, host_config)
+    def create_from_device_configs(
+        cls, source: "BacpypesSource", device_configs: Sequence[config_model.Device]
+    ) -> Iterable["Device"]:
+        for host_config in device_configs:
+            yield from cls._create_from_device_config(source, host_config)
 
     @property
-    def host(self) -> str:
-        return self._host
-
-    @property
-    def port(self) -> int:
-        return self._port
+    def address(self) -> str:
+        return self._address
 
     @property
     def metadata(self) -> dict[str, MetadataDict]:
@@ -330,35 +282,27 @@ class Host:
             for metric, metadata in group.metadata.items()
         }
 
-    async def _connect_and_run(self, stop_future: asyncio.Future[None]) -> None:
-        logger.info("Opening connection to {}:{}", self.host, self.port)
-        reader, writer = await asyncio.open_connection(self.host, self.port)
-        try:
-            client = AsyncTCPClient((reader, writer))
-            await asyncio.gather(
-                *[group.task(stop_future, client) for group in self._groups]
-            )
-        finally:
-            with suppress(Exception):
-                writer.close()
-                await writer.wait_closed()
-
-    async def task(self, stop_future: asyncio.Future[None]) -> None:
+    async def task(self, app: Application, stop_future: asyncio.Future[None]) -> None:
         retry = True
         while retry:
             try:
-                await self._connect_and_run(stop_future)
+                await asyncio.gather(
+                    *[group.task(stop_future, app) for group in self._groups]
+                )
                 retry = False
             except Exception as e:
-                logger.error("Error in Host {} task: {} ({})", self.host, e, type(e))
+                logger.error(
+                    "Error in Device {} task: {} ({})", self.address, e, type(e)
+                )
                 await asyncio.sleep(CONNECTION_FAILURE_RETRY_INTERVAL)
 
 
-class ModbusSource(Source):
+class BacpypesSource(Source):
     default_interval: Optional[Timedelta] = None
-    hosts: Optional[list[Host]] = None
-    _host_task_stop_future: Optional[asyncio.Future[None]] = None
-    _host_task: Optional[asyncio.Task[None]] = None
+    devices: Optional[list[Device]] = None
+    _device_task_stop_future: Optional[asyncio.Future[None]] = None
+    _device_task: Optional[asyncio.Task[None]] = None
+    bacnet: Optional[Application] = None
 
     @rpc_handler("config")
     async def _on_config(
@@ -368,46 +312,62 @@ class ModbusSource(Source):
         config = config_model.Source(**kwargs)
         self.default_interval = extract_interval(config)
 
-        if self.hosts is not None:
-            await self._stop_host_tasks()
+        if self.devices is not None:
+            await self._stop_device_tasks()
 
-        self.hosts = list(Host.create_from_host_configs(self, config.hosts))
+        if self.bacnet is not None:
+            self.bacnet.close()
+            self.bacnet = None
+
+        this_device = DeviceObject(
+            objectIdentifier=("device", 7),
+            objectName="MetricQBacpypesSource",
+            vendorIdentifier=999,
+        )
+
+        self.bacnet = NormalApplication(this_device, config.bacnetAddress)
+
+        self.devices = list(Device.create_from_device_configs(self, config.devices))
 
         await self.declare_metrics(
             {
                 metric: metadata
-                for host in self.hosts
+                for host in self.devices
                 for metric, metadata in host.metadata.items()
             }
         )
 
         self._create_host_tasks()
 
-    async def _stop_host_tasks(self) -> None:
-        assert self._host_task_stop_future is not None
-        assert self._host_task is not None
-        self._host_task_stop_future.set_result(None)
+    async def _stop_device_tasks(self) -> None:
+        assert self._device_task_stop_future is not None
+        assert self._device_task is not None
+        self._device_task_stop_future.set_result(None)
         try:
-            await asyncio.wait_for(self._host_task, timeout=30)
+            await asyncio.wait_for(self._device_task, timeout=30)
         except asyncio.TimeoutError:
             # wait_for also cancels the task
             logger.error("Host tasks did not stop in time")
-        self.hosts = None
-        self._host_task_stop_future = None
-        self._host_task = None
+        self.devices = None
+        self._device_task_stop_future = None
+        self._device_task = None
 
     def _create_host_tasks(self) -> None:
-        assert self.hosts is not None
-        assert self._host_task_stop_future is None
-        assert self._host_task is None
-        self._host_task_stop_future = asyncio.Future()
-        self._host_task = asyncio.create_task(self._run_host_tasks())
+        assert self.devices is not None
+        assert self._device_task_stop_future is None
+        assert self._device_task is None
+        self._device_task_stop_future = asyncio.Future()
+        self._device_task = asyncio.create_task(self._run_device_tasks())
 
-    async def _run_host_tasks(self) -> None:
-        assert self._host_task_stop_future is not None
-        assert self.hosts is not None
+    async def _run_device_tasks(self) -> None:
+        assert self._device_task_stop_future is not None
+        assert self.devices is not None
+        assert self.bacnet is not None
         await asyncio.gather(
-            *(host.task(self._host_task_stop_future) for host in self.hosts)
+            *(
+                device.task(self.bacnet, self._device_task_stop_future)
+                for device in self.devices
+            )
         )
 
     async def task(self) -> None:
@@ -416,4 +376,4 @@ class ModbusSource(Source):
         """
         assert self.task_stop_future is not None
         await self.task_stop_future
-        await self._stop_host_tasks()
+        await self._stop_device_tasks()

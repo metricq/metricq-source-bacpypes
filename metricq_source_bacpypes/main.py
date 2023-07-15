@@ -33,7 +33,7 @@ import click_completion  # type: ignore
 import click_log  # type: ignore
 from metricq.logging import get_logger
 
-from .source import ModbusSource
+from .source import BacpypesSource
 
 logger = get_logger()
 
@@ -51,5 +51,5 @@ click_completion.init()
 @click.option("--token", default="source-modbus")
 @click_log.simple_verbosity_option(logger)  # type: ignore
 def run(server, token) -> None:
-    src = ModbusSource(url=server, token=token)
+    src = BacpypesSource(url=server, token=token)
     src.run()
