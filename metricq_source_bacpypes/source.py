@@ -134,7 +134,7 @@ class Metric:
     def property_parameter(self) -> tuple[ObjectIdentifier, PropertyIdentifier]:
         return self._property_parameter
 
-    async def update(
+    async def send_update(
         self,
         timestamp: Timestamp,
         response: list[tuple[ObjectIdentifier, PropertyIdentifier, int | None, Any]],
@@ -226,17 +226,27 @@ class MetricGroup:
         app: Application,
     ) -> None:
         timestamp = Timestamp.now()
-        response = await app.read_property_multiple(
-            self.device.bacnet_address,
-            list(chain(*[metric.property_parameter for metric in self._metrics])),
-        )
+
+        try:
+            response = await app.read_property_multiple(
+                self.device.bacnet_address,
+                list(chain(*[metric.property_parameter for metric in self._metrics])),
+            )
+        except Exception as e:
+            logger.exception("Failed to read property: {}", e)
+            return
+
+        if response is None:
+            logger.error("Failed to read property. Result is None.")
+            return
+
         duration = Timestamp.now() - timestamp
         logger.debug(f"Request finished successfully in {duration}")
 
         # TODO insert small sleep and see if that helps align stuff
 
         await asyncio.gather(
-            *(metric.update(timestamp, response) for metric in self._metrics)
+            *(metric.send_update(timestamp, response) for metric in self._metrics)
         )
 
 
