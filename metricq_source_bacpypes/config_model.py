@@ -66,6 +66,10 @@ class Device(BaseModel, **_model_config):
 class Source(BaseModel, extra="ignore", frozen=True):
     bacnetAddress: str
     """Address of the BacNet client used as source"""
+    bacnetIdentifier: int
+    """Identifier for the BacNet client used as source"""
+    bacnetName: str
+    """Name of the BacNet client used as source"""
     interval: PositiveFloat | PositiveInt | str | None = None
     """
     Default query interval in seconds.

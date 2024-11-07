@@ -333,8 +333,8 @@ class BacpypesSource(Source):
                 self.bacnet = None
 
         this_device = DeviceObject(
-            objectName="MetricQBacpypesSource",
-            objectIdentifier=7,
+            objectName=config.bacnetName,
+            objectIdentifier=config.bacnetIdentifier,
             vendorIdentifier=15,
             maxApduLengthAccepted=1476,  # was like that in ye olden scriptures
         )
