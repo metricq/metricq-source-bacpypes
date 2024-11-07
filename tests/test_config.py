@@ -9,6 +9,8 @@ def test_simple() -> None:
         **{
             "interval": "100ms",
             "bacnetAddress": "123.45.67.89",
+            "bacnetIdentifier": 12345,
+            "bacnetName": "Test Bacnet Device",
             "devices": [
                 {
                     "address": "test[1-3]",
@@ -39,6 +41,8 @@ def test_minimal() -> None:
             "_ref": "abcd",
             "_rev": "efgh",
             "bacnetAddress": "123.45.67.89",
+            "bacnetIdentifier": 12345,
+            "bacnetName": "Test Bacnet Device",
             "devices": [
                 {
                     "address": "test",
@@ -63,6 +67,8 @@ def test_long() -> None:
         **{
             "interval": "100ms",
             "bacnetAddress": "123.45.67.89",
+            "bacnetIdentifier": 12345,
+            "bacnetName": "Test Bacnet Device",
             "devices": [
                 {
                     "address": "test",
@@ -164,6 +170,8 @@ def test_wrong_address_type() -> None:
         **{
             "interval": "100ms",
             "bacnetAddress": "123.45.67.89",
+            "bacnetIdentifier": 12345,
+            "bacnetName": "Test Bacnet Device",
             "devices": [
                 {
                     "address": "test",
