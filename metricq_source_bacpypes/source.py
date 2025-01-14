@@ -110,7 +110,7 @@ class Metric:
         self.unit = config.unit
         self._property_parameter = (
             ObjectIdentifier(self.identifier),
-            PropertyIdentifier("presentValue"),
+            [PropertyIdentifier("presentValue")],
         )
 
     @property
@@ -131,7 +131,7 @@ class Metric:
         return metadata
 
     @property
-    def property_parameter(self) -> tuple[ObjectIdentifier, PropertyIdentifier]:
+    def property_parameter(self) -> tuple[ObjectIdentifier, list[PropertyIdentifier]]:
         return self._property_parameter
 
     async def send_update(
